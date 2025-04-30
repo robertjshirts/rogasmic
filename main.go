@@ -5,10 +5,15 @@ import (
 	"bufio"
 	"log"
 	"os"
+
+	"github.com/robertjshirts/rogasmic/lexer"
+	"github.com/robertjshirts/rogasmic/types"
 )
 
 func main() {
-	var instructions []Instruction
+	types.Init()
+
+	//var instructions []types.Instruction
 	file, err := os.Open("asm.txt")
 	if err != nil {
 		log.Fatal(err)
@@ -16,16 +21,15 @@ func main() {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	col := 0
+	lineNo := 0
 	for scanner.Scan() {
 		line := scanner.Text()
-		instruction, err := parseLine(line, col)
+		_, err := parseLine(line, lineNo)
 		if err != nil {
 			log.Printf("Error parsing line: %s, error: %v", line, err)
 			os.Exit(1)
 		}
-		instructions = append(instructions, instruction)
-		col++
+		lineNo++
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -33,7 +37,9 @@ func main() {
 	}
 }
 
-func parseLine(line string, col int) (Instruction, error) {
-	toks := LexLine(line)
+func parseLine(line string, lineNo int) (types.Instruction, error) {
+	toks := lexer.LexLine(line, lineNo)
+	instruction := instructions.Parse(toks)
+
 	return nil, nil
 }
