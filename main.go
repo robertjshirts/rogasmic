@@ -3,16 +3,15 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/robertjshirts/rogasmic/lexer"
-	"github.com/robertjshirts/rogasmic/types"
+	"github.com/robertjshirts/rogasmic/parser"
 )
 
 func main() {
-	types.Init()
-
 	//var instructions []types.Instruction
 	file, err := os.Open("asm.txt")
 	if err != nil {
@@ -20,26 +19,38 @@ func main() {
 	}
 	defer file.Close()
 
+	var allBytes []byte
+
 	scanner := bufio.NewScanner(file)
 	lineNo := 0
 	for scanner.Scan() {
 		line := scanner.Text()
-		_, err := parseLine(line, lineNo)
+		bytes, err := parseLine(line, lineNo)
 		if err != nil {
 			log.Printf("Error parsing line: %s, error: %v", line, err)
 			os.Exit(1)
 		}
+		allBytes = append(allBytes, bytes...)
 		lineNo++
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+
+	err = os.WriteFile("kernel7.img", allBytes, 0644)
+	if err != nil {
+		log.Fatalf("Failed to write kernel7.img: %v", err)
+	}
 }
 
-func parseLine(line string, lineNo int) (types.Instruction, error) {
+func parseLine(line string, lineNo int) ([]byte, error) {
 	toks := lexer.LexLine(line, lineNo)
-	instruction := instructions.Parse(toks)
+	bytes, err := parser.ParseInstruction(toks)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("%d: % X\n", lineNo+1, bytes)
 
-	return nil, nil
+	return bytes, nil
 }

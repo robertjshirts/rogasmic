@@ -73,7 +73,7 @@ func (l *Lexer) readNumber() (string, types.TokenType) {
 func (l *Lexer) nextToken() types.Token {
 	var tok types.Token
 
-	for unicode.IsSpace(rune(l.ch)) {
+	for unicode.IsSpace(rune(l.ch)) || l.ch == ',' || l.ch == '(' || l.ch == ')' {
 		l.consumeChar()
 	}
 
@@ -82,20 +82,18 @@ func (l *Lexer) nextToken() types.Token {
 
 	switch l.ch {
 	case 0:
-		// tok = types.Token{Type: types.TokenEOF, Value: "", Line: l.line, Col: l.pos}
 		tok.Type = types.TokenEOF
 		tok.Value = ""
-	case ',':
-		tok.Type = types.TokenComma
-		tok.Value = string(l.ch)
-	case '(':
-		tok.Type = types.TokenLParen
-		tok.Value = string(l.ch)
-	case ')':
-		tok.Type = types.TokenRParen
-		tok.Value = string(l.ch)
 	case ';':
 		panic("Comment not implemented")
+	case 'S':
+		if unicode.IsSpace(rune(l.peekChar())) {
+			tok.Type = types.TokenSBit
+			tok.Value = "S"
+			l.consumeChar()
+			return tok
+		}
+		fallthrough
 	default:
 		if unicode.IsLetter(rune(l.ch)) {
 			lit := l.readIdentifier()
