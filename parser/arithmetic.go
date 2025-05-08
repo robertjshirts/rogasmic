@@ -43,6 +43,9 @@ func NewArithmeticInstruction(opCode types.OpCode, condCode types.CondCode, toke
 	}
 
 	for _, token := range tokens {
+		if isSugar(token) {
+			continue
+		}
 		switch token.Type {
 		case types.TokenRegister:
 			reg, err := parseRegister(token.Value)

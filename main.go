@@ -8,7 +8,6 @@ import (
 
 	"github.com/robertjshirts/rogasmic/lexer"
 	"github.com/robertjshirts/rogasmic/parser"
-	"github.com/robertjshirts/rogasmic/types"
 )
 
 func main() {
@@ -42,10 +41,14 @@ func main() {
 	lineNo := 1
 	for scanner.Scan() {
 		line := scanner.Text()
-		inst, err := parseLine(line, lineNo)
+
+		// Lex and parse
+		toks := lexer.LexLine(line, lineNo)
+		inst, err := parser.ParseInstruction(toks)
 		if err != nil {
-			log.Fatalf("Error parsing line: %s, error: %v", line, err)
+			log.Fatalf("Error parsing line #%d: %s, error: %v", lineNo, line, err)
 		}
+
 		allBytes = append(allBytes, inst.ToMachineCode()...)
 		lineNo++
 	}
@@ -60,14 +63,4 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to write %s: %v", outputFile, err)
 	}
-}
-
-func parseLine(line string, lineNo int) (types.Instruction, error) {
-	toks := lexer.LexLine(line, lineNo)
-	bytes, err := parser.ParseInstruction(toks)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes, nil
 }

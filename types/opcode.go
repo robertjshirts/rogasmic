@@ -12,6 +12,7 @@ const (
 	OpSUB                // Subtract
 	OpAND                // Bitwise AND
 	OpORR                // Bitwise OR
+	OpBX                 // Branch and exchange
 	OpB                  // Branch
 )
 
@@ -24,6 +25,7 @@ var OpCodesByLit = map[string]OpCode{
 	"SUB":  OpSUB,
 	"AND":  OpAND,
 	"ORR":  OpORR,
+	"BX":   OpBX,
 	"B":    OpB,
 }
 
@@ -36,6 +38,7 @@ var OpCodeBits = map[OpCode]uint32{
 	OpSUB:  0b0010,
 	OpAND:  0b0000,
 	OpORR:  0b1100,
+	OpBX:   0b0001_0010_1111_1111_1111_0001,
 	OpB:    0b101,
 }
 
@@ -45,6 +48,7 @@ const (
 	MOVType InstructionType = iota
 	ArithmeticType
 	MemoryType
+	BranchExType
 	BranchType
 )
 
@@ -57,5 +61,6 @@ var InstructionTypes = map[OpCode]InstructionType{
 	OpSUB:  ArithmeticType,
 	OpAND:  ArithmeticType,
 	OpORR:  ArithmeticType,
+	OpBX:   BranchExType,
 	OpB:    BranchType,
 }

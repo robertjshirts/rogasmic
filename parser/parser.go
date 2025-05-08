@@ -55,6 +55,12 @@ func ParseInstruction(tokens []types.Token) (types.Instruction, error) {
 			return nil, err
 		}
 		return instruction, nil
+	case types.BranchExType:
+		instruction, err := NewBranchExchangeInstruction(opCode, condCode, tokens)
+		if err != nil {
+			return nil, err
+		}
+		return instruction, nil
 	}
 
 	return nil, fmt.Errorf("unknown instruction type: %s", firstToken.Value)

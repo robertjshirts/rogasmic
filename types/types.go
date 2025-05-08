@@ -4,22 +4,25 @@ package types
 type TokenType int
 
 const (
+	// Control tokens
 	TokenEOF TokenType = iota
 	TokenError
+
+	// Literals and identifiers
 	TokenIdentifier
 	TokenRegister
 	TokenNumber
 	TokenHexNumber
 
+	// ARM-specific bits
 	TokenSBit
 	TokenLBit
 
+	// Punctuation
 	TokenComma
 	TokenLParen
 	TokenRParen
 	TokenSemicolon
-
-	Comment
 )
 
 type Token struct {

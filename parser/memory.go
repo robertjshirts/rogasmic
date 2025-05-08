@@ -37,6 +37,9 @@ func NewMemoryInstruction(opCode types.OpCode, condCode types.CondCode, tokens [
 	setRn := false
 
 	for _, token := range tokens {
+		if isSugar(token) {
+			continue
+		}
 		switch token.Type {
 		case types.TokenRegister:
 			reg, err := parseRegister(token.Value)

@@ -70,6 +70,16 @@ func (l *Lexer) readNumber() (string, types.TokenType) {
 	// No binary. fuck binary. me and my homies hate binary
 }
 
+func (l *Lexer) readComment() string {
+	start := l.pos
+	// Consume up to the EOL
+	for l.peekChar() != 0 {
+		l.consumeChar()
+	}
+	l.consumeChar()
+	return l.input[start:l.pos]
+}
+
 func (l *Lexer) nextToken() types.Token {
 	var tok types.Token
 
@@ -85,7 +95,9 @@ func (l *Lexer) nextToken() types.Token {
 		tok.Type = types.TokenEOF
 		tok.Value = ""
 	case ';':
-		panic("Comment not implemented")
+		tok.Type = types.TokenSemicolon
+		tok.Value = l.readComment()
+		return tok
 	case 'S':
 		if unicode.IsSpace(rune(l.peekChar())) {
 			tok.Type = types.TokenSBit
@@ -93,7 +105,15 @@ func (l *Lexer) nextToken() types.Token {
 			l.consumeChar()
 			return tok
 		}
-		fallthrough
+		fallthrough // Fall through ie STR instruction
+	case 'L':
+		if unicode.IsSpace(rune(l.peekChar())) {
+			tok.Type = types.TokenLBit
+			tok.Value = "L"
+			l.consumeChar()
+			return tok
+		}
+		fallthrough // Fall through ie LDR instruction
 	default:
 		if unicode.IsLetter(rune(l.ch)) {
 			lit := l.readIdentifier()

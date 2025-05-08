@@ -29,6 +29,9 @@ func NewMOVInstruction(opCode types.OpCode, condCode types.CondCode, tokens []ty
 	}
 
 	for _, token := range tokens {
+		if isSugar(token) {
+			continue
+		}
 		switch token.Type {
 		case types.TokenRegister:
 			rd, err := parseRegister(token.Value)
