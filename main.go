@@ -3,17 +3,34 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"os"
 
 	"github.com/robertjshirts/rogasmic/lexer"
 	"github.com/robertjshirts/rogasmic/parser"
+	"github.com/robertjshirts/rogasmic/types"
 )
 
 func main() {
 	//var instructions []types.Instruction
-	file, err := os.Open("asm.txt")
+	if len(os.Args) > 3 || len(os.Args) < 2 {
+		log.Fatal("Usage: rogasmic <input file> <output file>")
+	}
+
+	inputFile := os.Args[1]
+	if inputFile == "" {
+		log.Fatal("Please provide an input filename")
+	}
+
+	outputFile := "kernel7.img"
+	if len(os.Args) == 3 {
+		outputFile = os.Args[2]
+		if outputFile == "" {
+			log.Fatal("Please provide an output filename")
+		}
+	}
+
+	file, err := os.Open(inputFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -22,15 +39,14 @@ func main() {
 	var allBytes []byte
 
 	scanner := bufio.NewScanner(file)
-	lineNo := 0
+	lineNo := 1
 	for scanner.Scan() {
 		line := scanner.Text()
-		bytes, err := parseLine(line, lineNo)
+		inst, err := parseLine(line, lineNo)
 		if err != nil {
-			log.Printf("Error parsing line: %s, error: %v", line, err)
-			os.Exit(1)
+			log.Fatalf("Error parsing line: %s, error: %v", line, err)
 		}
-		allBytes = append(allBytes, bytes...)
+		allBytes = append(allBytes, inst.ToMachineCode()...)
 		lineNo++
 	}
 
@@ -38,19 +54,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = os.WriteFile("kernel7.img", allBytes, 0644)
+	log.Printf("Parsed %d lines", lineNo)
+	log.Printf("Writing %s", outputFile)
+	err = os.WriteFile(outputFile, allBytes, 0644)
 	if err != nil {
-		log.Fatalf("Failed to write kernel7.img: %v", err)
+		log.Fatalf("Failed to write %s: %v", outputFile, err)
 	}
 }
 
-func parseLine(line string, lineNo int) ([]byte, error) {
+func parseLine(line string, lineNo int) (types.Instruction, error) {
 	toks := lexer.LexLine(line, lineNo)
 	bytes, err := parser.ParseInstruction(toks)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("%d: % X\n", lineNo+1, bytes)
 
 	return bytes, nil
 }
