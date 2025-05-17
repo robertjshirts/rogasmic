@@ -1,30 +1,30 @@
 MOVW R4, 0x0000
 MOVT R4, 0x3F20
 ADD R2, R4, 0x8
-LDR R3, (R2)
+LDR R3, [R2]
 ORR R3, R3, 0x8
-STR R3, (R2)
+STR R3, [R2]
 
 start:
-ADD R3, R4, 0x1C       ;       -12
-MOVW R2, 0x0000        ;       -11
-MOVT R2, 0x0020        ;       -10
-STR R2, (R3)           ;       -9
-B L delay           ; -2    -8
+ADD R3, R4, 0x1C 
+MOVW R2, 0x0000 
+MOVT R2, 0x0020
+STR R2, [R3]
+BL delay
 
-ADD R3, R4, 0x28       ; -1    -7
-MOVW R2, 0x0000        ;  0    -6
-MOVT R2, 0x0020        ;  1    -5
-STR R2, (R3)           ;  2    -4
-B L delay           ;  3 -2 -3
+ADD R3, R4, 0x28
+MOVW R2, 0x0000
+MOVT R2, 0x0020
+STR R2, [R3]
+BL delay
 
-B start             ;  4 -1 -2
+B start
 
 delay:
-MOVW R5, 0xFFFF        ;  5  0
+MOVW R5, 0xFFFF
 MOVT R5, 0x000F
 loop:
-SUB S R5, R5, 0x01     ;  -3
-B PL loop          ;  -2
+SUBS R5, R5, 0x01
+BPL loop
 
 BX R14

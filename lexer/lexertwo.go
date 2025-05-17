@@ -2,7 +2,6 @@ package lexer
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -52,95 +51,100 @@ func (l *LexerTwo) peekChar() byte {
 	return l.input[l.readPosition]
 }
 
-func (l *LexerTwo) lexToken() (NewToken, error) {
-	for unicode.IsSpace(rune(l.ch)) {
-		l.consumeChar()
-	}
-
-	tok := NewToken{
-		Line:   l.line,
-		Column: l.column,
-	}
-
-	// Single character tokens
-	switch l.ch {
-	case 0:
-		tok.Type = TokenEOF
-		tok.Literal = ""
-		// Don't consume EOF
-		return tok, nil
-	case ',':
-		tok.Type = TokenComma
-		tok.Literal = string(l.ch)
-		l.consumeChar()
-		return tok, nil
-	case '(':
-		tok.Type = TokenLParen
-		tok.Literal = string(l.ch)
-		l.consumeChar()
-		return tok, nil
-	case ')':
-		tok.Type = TokenRParen
-		tok.Literal = string(l.ch)
-		l.consumeChar()
-		return tok, nil
-	}
-
-	if l.ch == '#' {
-		l.consumeChar()
-		lit := l.consumeLiteral()
-		if lit == "" {
-			tok.Type = TokenError
-			tok.Literal = "immediate value is empty"
-			return tok, fmt.Errorf("immediate value is empty at %d:%d", l.line, l.column)
-		}
-		imm, err := strconv.ParseUint(lit, 0, 32)
-		if err != nil {
-			tok.Type = TokenError
-			tok.Literal = lit
-			return tok, fmt.Errorf("error parsing immediate value: %v", err)
-		}
-		tok.Type = TokenImmediate
-		tok.Literal = strconv.FormatUint(imm, 10) // Format to base 10
-		return tok, nil
-	} else if unicode.IsLetter(rune(l.ch)) {
-		lit := l.consumeLiteral()
-		if isLabel(lit) {
-			tok.Type = TokenLabel
-			tok.Literal = lit
-			return tok, nil
-		} else if isRegister(lit) {
-			tok.Type = TokenRegister
-			tok.Literal = lit
-			return tok, nil
-		} else if typ, ok := NewTokenTypesByLit[strings.ToUpper(lit)]; ok {
-			tok.Type = typ
-			tok.Literal = lit
-			return tok, nil
-		} else {
-			tok.Type = TokenIdentifier
-			tok.Literal = lit
-			return tok, nil
-		}
-	}
-
-	return tok, nil
-}
-
 func (l *LexerTwo) Tokenize() ([]NewToken, []error) {
 	var tokens []NewToken
 	var errs []error
 	for {
-		tok, err := l.lexToken()
-		if err != nil {
-			errs = append(errs, err)
+		// skip whitespace
+		for unicode.IsSpace(rune(l.ch)) {
+			l.consumeChar()
 		}
-		if tok.Type == TokenEOF {
-			break
+
+		tok := NewToken{
+			Line:   l.line,
+			Column: l.column,
 		}
+
+		switch l.ch {
+		case 0:
+			return tokens, errs
+		case ',':
+			tok.Type = TokenComma
+			tok.Literal = string(l.ch)
+			l.consumeChar()
+		case '[':
+			tok.Type = TokenLBracket
+			tok.Literal = string(l.ch)
+			l.consumeChar()
+		case ']':
+			tok.Type = TokenRBracket
+			tok.Literal = string(l.ch)
+			l.consumeChar()
+		case '#':
+			l.consumeChar()
+			lit := l.consumeLiteral()
+			if !isImmediate(lit) {
+				tok.Type = TokenError
+				tok.Literal = lit
+				errs = append(errs, fmt.Errorf("invalid immediate value: %s at %d:%d", lit, l.line, l.column))
+			} else {
+				tok.Type = TokenImmediate
+				tok.Literal = lit
+			}
+		default:
+			lit := l.consumeLiteral()
+
+			splitFound := false
+			// Try to split the literal into mnemonic and condition code
+			for i := range lit {
+				// Check if valid mnemonic and condition code
+				mnemonic := strings.ToUpper(lit[:i])
+				condition := strings.ToUpper(lit[i:])
+				mnemonicTyp, mnemonicOk := MnemonicsByLit[strings.ToUpper(mnemonic)]
+				conditionTyp, conditionOk := ConditionCodesByLit[strings.ToUpper(condition)]
+
+				if mnemonicOk && conditionOk {
+					mnemonicToken := NewToken{
+						Type:    mnemonicTyp,
+						Literal: mnemonic,
+						Line:    tok.Line,
+						Column:  tok.Column,
+					}
+					conditionToken := NewToken{
+						Type:    conditionTyp,
+						Literal: condition,
+						Line:    tok.Line,
+						Column:  tok.Column + i,
+					}
+
+					tokens = append(tokens, mnemonicToken, conditionToken)
+
+					splitFound = true
+					break
+				}
+			}
+
+			if splitFound {
+				continue
+			}
+
+			if isLabel(lit) {
+				tok.Type = TokenLabel
+				tok.Literal = lit
+			} else if isRegister(lit) {
+				tok.Type = TokenRegister
+				tok.Literal = lit
+			} else if typ, ok := NewTokenTypesByLit[strings.ToUpper(lit)]; ok {
+				tok.Type = typ
+				tok.Literal = lit
+			} else {
+				tok.Type = TokenIdentifier
+				tok.Literal = lit
+			}
+		}
+
 		tokens = append(tokens, tok)
 	}
-	return tokens, errs
 }
 
 func (l *LexerTwo) consumeLiteral() string {
@@ -157,4 +161,19 @@ func isLabel(lit string) bool {
 
 func isRegister(lit string) bool {
 	return len(lit) > 1 && lit[0] == 'R' && isDigit(lit[1])
+}
+
+func isImmediate(lit string) bool {
+	lit = strings.ToUpper(lit)
+	// Trim off the '0x' prefix if present so we can check for hex digits
+	isHex := len(lit) > 2 && lit[0] == '0' && lit[1] == 'X'
+	if isHex {
+		lit = lit[2:]
+	}
+	for _, c := range lit {
+		if !unicode.Is(unicode.Hex_Digit, c) {
+			return false
+		}
+	}
+	return true
 }

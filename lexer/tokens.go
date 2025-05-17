@@ -7,8 +7,8 @@ const (
 	TokenError
 
 	TokenComma
-	TokenLParen
-	TokenRParen
+	TokenLBracket
+	TokenRBracket
 
 	TokenIdentifier
 	TokenLabel
@@ -18,7 +18,6 @@ const (
 
 	TokenSSuffix
 	TokenLSuffix
-	TokenConditionCode
 
 	TokenMOVW
 	TokenMOVT
@@ -26,11 +25,38 @@ const (
 	TokenSTR
 	TokenADD
 	TokenSUB
+	TokenSUBS
 	TokenAND
 	TokenORR
 	TokenBX
 	TokenB
+	TokenBL
+
+	TokenEQ
+	TokenPL
+	TokenAL
 )
+
+var MnemonicsByLit = map[string]NewTokenType{
+	"MOVW": TokenMOVW,
+	"MOVT": TokenMOVT,
+	"LDR":  TokenLDR,
+	"STR":  TokenSTR,
+	"ADD":  TokenADD,
+	"SUB":  TokenSUB,
+	"SUBS": TokenSUBS,
+	"AND":  TokenAND,
+	"ORR":  TokenORR,
+	"BX":   TokenBX,
+	"B":    TokenB,
+	"BL":   TokenBL,
+}
+
+var ConditionCodesByLit = map[string]NewTokenType{
+	"AL": TokenAL,
+	"PL": TokenPL,
+	"EQ": TokenEQ,
+}
 
 var NewTokenTypesByLit = map[string]NewTokenType{
 	"MOVW": TokenMOVW,
@@ -39,20 +65,32 @@ var NewTokenTypesByLit = map[string]NewTokenType{
 	"STR":  TokenSTR,
 	"ADD":  TokenADD,
 	"SUB":  TokenSUB,
+	"SUBS": TokenSUBS,
 	"AND":  TokenAND,
 	"ORR":  TokenORR,
 	"BX":   TokenBX,
 	"B":    TokenB,
-	"AL":   TokenConditionCode,
-	"PL":   TokenConditionCode,
-	"EQ":   TokenConditionCode,
-	"NE":   TokenConditionCode,
-	"LT":   TokenConditionCode,
-	"LE":   TokenConditionCode,
-	"GT":   TokenConditionCode,
-	"GE":   TokenConditionCode,
+	"BL":   TokenBL,
+	"AL":   TokenAL,
+	"PL":   TokenPL,
+	"EQ":   TokenEQ,
 	"S":    TokenSSuffix,
 	"L":    TokenLSuffix,
+}
+
+var NewTokenTypeInstructions = map[NewTokenType]struct{}{
+	TokenMOVW: {},
+	TokenMOVT: {},
+	TokenLDR:  {},
+	TokenSTR:  {},
+	TokenADD:  {},
+	TokenSUB:  {},
+	TokenSUBS: {},
+	TokenAND:  {},
+	TokenORR:  {},
+	TokenBX:   {},
+	TokenB:    {},
+	TokenBL:   {},
 }
 
 type NewToken struct {
