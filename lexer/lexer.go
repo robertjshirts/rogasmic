@@ -111,14 +111,23 @@ func (l *lexer) Tokenize() ([]types.Token, error) {
 		case '!':
 			l.appendToken(types.TokenBang, string(l.current()), startRow, startCol)
 			l.consume()
-		case '#':
-			l.consume() // Skip the #
-			lit := l.consumeLit()
-			if !utils.IsImmediate(lit) {
-				return nil, fmt.Errorf("invalid immediate value: %s at line %d, col %d", lit, l.line, l.col)
-			}
-			l.appendToken(types.TokenImmediate, lit, startRow, startCol)
-		default: // Handle registers, mnemonics, and labels/identifiers
+	case '#':
+		l.consume() // Skip the #
+		lit := l.consumeLit()
+		if !utils.IsImmediate(lit) {
+			return nil, fmt.Errorf("invalid immediate value: %s at line %d, col %d", lit, l.line, l.col)
+		}
+		l.appendToken(types.TokenImmediate, lit, startRow, startCol)
+	case '{':
+		l.appendToken(types.TokenLBrace, string(l.current()), startRow, startCol)
+		l.consume()
+	case '}':
+		l.appendToken(types.TokenRBrace, string(l.current()), startRow, startCol)
+		l.consume()
+	case '-':
+		l.appendToken(types.TokenDash, string(l.current()), startRow, startCol)
+		l.consume()
+	default: // Handle registers, mnemonics, and labels/identifiers
 			lit := l.consumeLit()
 			if lit == "" {
 				return nil, fmt.Errorf("unexpected input (not a valid lit or identifier) at line %d, col %d", l.line, l.col)

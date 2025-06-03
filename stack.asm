@@ -16,7 +16,7 @@ STR R2, [R3] ; write the correct bit (R2) into the GPSET address (R3)
 STMEA sp!, {R0-R12} ; Store all registers
 MOVW R5, #0x0900 ; store 4 mil
 MOVT R5, #0x003D ; store 4 mil
-STR R5, [sp!], #4 ; copy delay onto stack at the current sp, then incr by 4
+STR R5, [sp]!, #4 ; copy delay onto stack at the current sp, then incr by 4
 BL delay ; branch to subroutine
 LDMEA sp!, {R0-R12} ; Restore all registers
 
@@ -28,7 +28,7 @@ MOVW R5, #0x4F20 ; store 1 mil
 MOVT R5, #0x000F ; store 1 mil
 STR R5, [sp]!, #4 ; copy delay onto the stack at the current sp, then incr by 4
 BL delay ; branch to subroutine
-LDMEA sp! {R0-R12} ; restore all registers
+LDMEA sp!, {R0-R12} ; restore all registers
 
 B start ; restart
 

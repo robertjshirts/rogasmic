@@ -276,3 +276,28 @@ func TestLexerComments(t *testing.T) {
 		})
 	}
 }
+
+func TestLexerRegisterList(t *testing.T) {
+	input := "{R0-R12}"
+	expectedTokens := []types.Token{
+		{Type: types.TokenLBrace, Literal: "{", Line: 1, Col: 1},
+		{Type: types.TokenRegister, Literal: "R0", Line: 1, Col: 2},
+		{Type: types.TokenDash, Literal: "-", Line: 1, Col: 4},
+		{Type: types.TokenRegister, Literal: "R12", Line: 1, Col: 5},
+		{Type: types.TokenRBrace, Literal: "}", Line: 1, Col: 8},
+		{Type: types.TokenEOF, Literal: "", Line: -1, Col: -1},
+	}
+	l := NewLexer(input)
+	tokens, err := l.Tokenize()
+	if err != nil {
+		t.Fatalf("unexpected error tokenizing: %v", err)
+	}
+	if len(tokens) != len(expectedTokens) {
+		t.Fatalf("expected %d tokens, got %d", len(expectedTokens), len(tokens))
+	}
+	for i, token := range tokens {
+		if token.Type != expectedTokens[i].Type || token.Literal != expectedTokens[i].Literal {
+			t.Errorf("token mismatch at index %d: expected %+v, got %+v", i, expectedTokens[i], token)
+		}
+	}
+}

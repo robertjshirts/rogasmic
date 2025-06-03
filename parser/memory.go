@@ -148,6 +148,116 @@ func (p *Parser) parseMemoryMultiple() (types.Instruction, error) {
 	}
 
 	// Get condition code and suffixes
+	condition, pBit, uBit, err := utils.ParseMemorySuffixes(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing memory multiple suffixes: %w", err)
+	}
+	p.consume() // consume LDM or STM token
 
-	panic("Memory multiple instructions not finished implementing yet")
+	// Base Register
+	if p.current().Type != types.TokenRegister {
+		return nil, fmt.Errorf("expected base register after LDM/STM mnemonic, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	baseReg, err := utils.ParseRegister(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing base register: %w", err)
+	}
+	p.consume() // consume base register token
+
+	// Writeback
+	wBit := uint32(0)
+	if p.current().Type == types.TokenBang {
+		wBit = 1
+		p.consume() // consume '!' token
+	}
+
+	// Comma
+	if p.current().Type != types.TokenComma {
+		return nil, fmt.Errorf("expected comma after base register/writeback, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	p.consume() // consume comma token
+
+	// Register list
+	if p.current().Type != types.TokenLBrace {
+		return nil, fmt.Errorf("expected '{' for register list, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	p.consume() // consume '{' token
+
+	var regs []uint32
+	for p.current().Type != types.TokenRBrace {
+		if p.current().Type != types.TokenRegister {
+			return nil, fmt.Errorf("expected register in register list, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+		}
+		startReg, err := utils.ParseRegister(p.current().Literal)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing register in list: %w", err)
+		}
+		p.consume() // consume register token
+
+		// Range
+		if p.current().Type == types.TokenDash {
+			p.consume() // consume '-' token
+			if p.current().Type != types.TokenRegister {
+				return nil, fmt.Errorf("expected register after '-', got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+			}
+			endReg, err := utils.ParseRegister(p.current().Literal)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing register in range: %w", err)
+			}
+			p.consume() // consume register token
+
+			if startReg <= endReg {
+				for r := startReg; r <= endReg; r++ {
+					regs = append(regs, r)
+				}
+			} else {
+				for r := startReg; r >= endReg; r-- {
+					regs = append(regs, r)
+				}
+			}
+		} else {
+			regs = append(regs, startReg)
+		}
+
+		if p.current().Type == types.TokenComma {
+			p.consume() // consume ',' token
+		} else if p.current().Type != types.TokenRBrace {
+			return nil, fmt.Errorf("expected ',' or '}' in register list, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+		}
+	}
+
+	p.consume() // consume '}' token
+
+	// Compute mask
+	var mask uint32
+	for _, r := range regs {
+		mask |= 1 << r
+	}
+
+	instruction := &InstructionMemoryMultiple{
+		Mnemonic:     mnemonic,
+		Condition:    condition,
+		BaseRegister: baseReg,
+		PBit:         pBit,
+		UBit:         uBit,
+		WBit:         wBit,
+		Offset:       mask,
+	}
+
+	return instruction, nil
+}
+
+// ToMachineCode for memory multiple instructions
+func (i *InstructionMemoryMultiple) ToMachineCode(labels map[string]uint32) ([]byte, error) {
+	var binary uint32
+	binary |= types.ConditionToBits[i.Condition] << 28 // Condition code
+	binary |= 1 << 27                                  // Block data transfer
+	binary |= i.PBit << 24                             // P bit, pre or post index
+	binary |= i.UBit << 23                             // U bit, add or subtract offset
+	binary |= i.WBit << 21                             // W bit, write back
+	binary |= types.MnemonicToBits[i.Mnemonic] << 20   // L bit (1 for LDM, 0 for STM)
+	binary |= i.BaseRegister << 16                     // Base register
+	binary |= i.Offset                                 // Register list bitmask
+
+	return utils.BitsToBytes(binary), nil
 }

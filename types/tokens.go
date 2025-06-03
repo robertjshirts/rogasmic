@@ -17,6 +17,9 @@ const (
 	TokenLBracket
 	TokenRBracket
 	TokenBang // For write back bit on registers (specifically for LDM/STM)
+	TokenLBrace
+	TokenRBrace
+	TokenDash
 
 	TokenIdentifier
 	TokenLabel

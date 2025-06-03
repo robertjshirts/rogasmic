@@ -63,7 +63,7 @@ func ParseMemorySuffixes(mnemonicLiteral string) (types.ConditionType, uint32, u
 	}
 
 	mnemonicLiteral = strings.ToLower(mnemonicLiteral[3:]) // Remove LDR/STR/LDM/STM
-	if mnemonicLiteral == "" {
+	if mnemonicLiteral == "" || mnemonicLiteral == "ea" {
 		return types.ConditionAL, pBit, uBit, nil
 	}
 
