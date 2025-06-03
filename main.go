@@ -1,66 +1,62 @@
-// 32 bit arm assembler
 package main
 
 import (
-	"bufio"
-	"log"
+	"fmt"
 	"os"
 
+	"github.com/robertjshirts/rogasmic/assembler"
 	"github.com/robertjshirts/rogasmic/lexer"
 	"github.com/robertjshirts/rogasmic/parser"
+	"github.com/robertjshirts/rogasmic/types"
 )
 
 func main() {
-	//var instructions []types.Instruction
-	if len(os.Args) > 3 || len(os.Args) < 2 {
-		log.Fatal("Usage: rogasmic <input file> <output file>")
+	inputFile := "labels.asm"
+	if len(os.Args) > 1 {
+		inputFile = os.Args[1]
+	}
+	file, err := os.ReadFile(inputFile)
+	if err != nil {
+		panic(err)
+	}
+	l := lexer.NewLexer(string(file))
+	tokens, err := l.Tokenize()
+	if err != nil {
+		panic(err)
 	}
 
-	inputFile := os.Args[1]
-	if inputFile == "" {
-		log.Fatal("Please provide an input filename")
+	fmt.Printf("Tokenized %d tokens:\n", len(tokens))
+	for _, token := range tokens {
+		fmt.Printf("Token Type=%s, Literal=%s, Line=%d, Col=%d\n", types.TokenToLiteral[token.Type], token.Literal, token.Line, token.Col)
 	}
 
+	p := parser.NewParser(tokens)
+	instructions, labelMap, err := p.Parse()
+	if err != nil {
+		fmt.Printf("Error parsing instructions: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Parsed %d instructions:\n", len(instructions))
+
+	a := assembler.NewAssembler(instructions, labelMap)
+	machineCode, err := a.Assemble()
+	if err != nil {
+		fmt.Printf("Error assembling instructions: %v\n", err)
+		return
+	}
+	fmt.Printf("Assembled machine code: %x\n", machineCode)
+
+	fmt.Printf("Writing kernel7.img...\n")
 	outputFile := "kernel7.img"
-	if len(os.Args) == 3 {
+	if len(os.Args) > 2 {
 		outputFile = os.Args[2]
-		if outputFile == "" {
-			log.Fatal("Please provide an output filename")
-		}
 	}
-
-	file, err := os.Open(inputFile)
+	err = os.WriteFile(outputFile, machineCode, 0644)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Printf("Error writing output file %s: %v\n", outputFile, err)
+		return
 	}
-	defer file.Close()
-
-	var allBytes []byte
-
-	scanner := bufio.NewScanner(file)
-	lineNo := 1
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Lex and parse
-		toks := lexer.LexLine(line, lineNo)
-		inst, err := parser.ParseInstruction(toks)
-		if err != nil {
-			log.Fatalf("Error parsing line #%d: %s, error: %v", lineNo, line, err)
-		}
-
-		allBytes = append(allBytes, inst.ToMachineCode()...)
-		lineNo++
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Parsed %d lines", lineNo)
-	log.Printf("Writing %s", outputFile)
-	err = os.WriteFile(outputFile, allBytes, 0644)
-	if err != nil {
-		log.Fatalf("Failed to write %s: %v", outputFile, err)
-	}
+	fmt.Printf("Successfully wrote %d bytes to %s\n", len(machineCode), outputFile)
+	fmt.Printf("Done!\n")
 }

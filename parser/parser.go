@@ -2,116 +2,100 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/robertjshirts/rogasmic/types"
 )
 
-func ParseInstruction(tokens []types.Token) (types.Instruction, error) {
-	if len(tokens) < 2 {
-		return nil, fmt.Errorf("not enough tokens for instruction: expected at least 2, got %d", len(tokens))
-	}
-	// Parse the first token as opcode
-	firstToken := tokens[0]
-	tokens = tokens[1:]
-	opCode, ok := types.OpCodesByLit[firstToken.Value]
-	if !ok {
-		return nil, fmt.Errorf("expected opcode, got %q", firstToken.Value)
-	}
-
-	// Try to parse second token as condition code, otherwise default to AL
-	secondToken := tokens[0]
-	condCode := types.CondCodesByLit["AL"]
-	if secondToken.Type == types.TokenIdentifier {
-		if tempCond, ok := types.CondCodesByLit[secondToken.Value]; ok {
-			condCode = tempCond
-			tokens = tokens[1:]
-		}
-	}
-
-	// Using maps and switches for maximum performance
-	switch types.InstructionTypes[opCode] {
-	case types.MOVType:
-		instruction, err := NewMOVInstruction(opCode, condCode, tokens)
-		if err != nil {
-			return nil, err
-		}
-		return instruction, nil
-	case types.ArithmeticType:
-		instruction, err := NewArithmeticInstruction(opCode, condCode, tokens)
-		if err != nil {
-			return nil, err
-		}
-		return instruction, nil
-	case types.MemoryType:
-		instruction, err := NewMemoryInstruction(opCode, condCode, tokens)
-		if err != nil {
-			return nil, err
-		}
-		return instruction, nil
-	case types.BranchType:
-		instruction, err := NewBranchInstruction(opCode, condCode, tokens)
-		if err != nil {
-			return nil, err
-		}
-		return instruction, nil
-	case types.BranchExType:
-		instruction, err := NewBranchExchangeInstruction(opCode, condCode, tokens)
-		if err != nil {
-			return nil, err
-		}
-		return instruction, nil
-	}
-
-	return nil, fmt.Errorf("unknown instruction type: %s", firstToken.Value)
+type Parser struct {
+	pos          int
+	tokens       []types.Token
+	instructions []types.Instruction
+	labels       types.LabelMap // Maps label names to instruction numbers
 }
 
-// isSugar returns true if the token is a syntactic sugar token
-func isSugar(token types.Token) bool {
-	switch token.Type {
-	case types.TokenComma:
-	case types.TokenLParen:
-	case types.TokenRParen:
-	case types.TokenSemicolon:
-		return true
-	default:
-		return false
+func NewParser(tokens []types.Token) *Parser {
+	if len(tokens) == 0 || tokens[len(tokens)-1].Type != types.TokenEOF {
+		// Ensure the last token is EOF
+		tokens = append(tokens, types.Token{Type: types.TokenEOF, Literal: "", Line: -1, Col: -1})
 	}
-	return false
+	return &Parser{
+		pos:          0,
+		tokens:       tokens,
+		instructions: make([]types.Instruction, 0),
+		labels:       make(types.LabelMap),
+	}
 }
 
-func parseRegister(tokenLit string) (uint32, error) {
-	if len(tokenLit) < 2 {
-		return 0, fmt.Errorf("invalid register literal: %q is too short", tokenLit)
+func (p *Parser) current() types.Token {
+	if p.pos >= len(p.tokens) {
+		return types.Token{Type: types.TokenEOF, Literal: "", Line: -1, Col: -1} // EOF token
 	}
-	if tokenLit[0] != 'R' && tokenLit[0] != 'r' {
-		return 0, fmt.Errorf("invalid register literal: %q does not start with 'R' or 'r'", tokenLit)
-	}
-	register, err := strconv.ParseUint(tokenLit[1:], 10, 8)
-	if err != nil {
-		return 0, fmt.Errorf("invalid register literal: %q - %v", tokenLit, err)
-	}
-	if register > 14 { // 15 is the program counter
-		return 0, fmt.Errorf("invalid register number: %d, must be between 0 and 14", register)
-	}
-
-	return uint32(register), nil
+	return p.tokens[p.pos]
 }
 
-func parseImmediate(tokenLit string, maxBits int) (uint32, error) {
-	immediateValue64, err := strconv.ParseUint(tokenLit, 0, maxBits)
-	if err != nil {
-		return 0, fmt.Errorf("invalid immediate value: %v", err)
+func (p *Parser) consume() {
+	if p.pos < len(p.tokens) {
+		p.pos++
 	}
-	return uint32(immediateValue64), nil
 }
 
-// Little endian
-func bitsToBytes(bits uint32) []byte {
-	bytes := make([]byte, 4)
-	bytes[0] = byte(bits & 0xFF)
-	bytes[1] = byte((bits >> 8) & 0xFF)
-	bytes[2] = byte((bits >> 16) & 0xFF)
-	bytes[3] = byte((bits >> 24) & 0xFF)
-	return bytes
+func (p *Parser) peek() types.Token {
+	if p.pos+1 >= len(p.tokens) {
+		return types.Token{Type: types.TokenEOF, Literal: "", Line: -1, Col: -1} // EOF token
+	}
+	return p.tokens[p.pos+1]
+}
+
+func (p *Parser) Parse() ([]types.Instruction, types.LabelMap, error) {
+
+	for p.current().Type != types.TokenEOF {
+		instructionCategory, ok := types.MnemonicTokenToCategory[p.current().Type]
+		if !ok {
+			if p.current().Type != types.TokenLabel {
+				// Any other token is unexpected
+				return nil, nil, fmt.Errorf("unexpected token %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+			}
+
+			p.labels[p.current().Literal] = uint32(len(p.instructions))
+			p.consume() // consume label token
+			continue    // skip to next token
+		}
+
+		switch instructionCategory {
+		case types.MnemonicCategoryMOV:
+			instruction, err := p.parseMOV()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing MOV instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
+		case types.MnemonicCategoryLoadStore:
+			instruction, err := p.parseMemory()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing memory instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
+		case types.MnemonicCategoryArithmetic:
+			instruction, err := p.parseArithmetic()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing arithmetic instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
+		case types.MnemonicCategoryBranch:
+			instruction, err := p.parseBranch()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing branch instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
+		case types.MnemonicCategoryBranchExchange:
+			instruction, err := p.parseBranchExchange()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing branch exchange instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
+		default:
+			return nil, nil, fmt.Errorf("unknown instruction category at line %d, col %d", p.current().Line, p.current().Col)
+		}
+	}
+
+	return p.instructions, p.labels, nil
 }

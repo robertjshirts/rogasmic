@@ -4,98 +4,128 @@ import (
 	"fmt"
 
 	"github.com/robertjshirts/rogasmic/types"
+	"github.com/robertjshirts/rogasmic/utils"
 )
 
-type BranchInstruction struct {
-	OpCode   types.OpCode
-	CondCode types.CondCode
-	LBit     uint32
-	Offset   uint32
+type InstructionBranch struct {
+	Mnemonic      types.MnemonicType
+	Condition     types.ConditionType
+	LBit          uint32
+	Offset        uint32
+	Label         string
+	InstructionNo uint32 // Instruction number for relative addressing
 }
 
-type BranchExchangeInstruction struct {
-	OpCode   types.OpCode
-	CondCode types.CondCode
-	Rn       uint32
+type InstructionBranchExchange struct {
+	Mnemonic     types.MnemonicType
+	Condition    types.ConditionType
+	BaseRegister uint32
 }
 
-func NewBranchInstruction(opCode types.OpCode, condCode types.CondCode, tokens []types.Token) (*BranchInstruction, error) {
-	// Need at least one token, the offset
-	if len(tokens) < 1 {
-		return nil, fmt.Errorf("invalid branch instruction: expected at least 1 token (offset), got %d", len(tokens))
+func (p *Parser) parseBranch() (types.Instruction, error) {
+	// Mnemonic
+	mnemonic := types.TokenToMnemonic[p.current().Type]
+	category, ok := types.MnemonicToCategory[mnemonic]
+	if !ok || category != types.MnemonicCategoryBranch {
+		return nil, fmt.Errorf("wrong instruction type! expected branch mnemonic, got %s", p.current().Literal)
 	}
 
-	if instType := types.InstructionTypes[opCode]; instType != types.BranchType {
-		return nil, fmt.Errorf("invalid branch instruction: opcode %d is not a branch type", opCode)
+	// Get condition code and L suffix
+	condition, lBit, err := utils.ParseBranchSuffixes(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing branch suffixes: %w", err)
 	}
+	p.consume() // consume branch mnemonic token
 
-	instruction := &BranchInstruction{
-		OpCode:   opCode,
-		CondCode: condCode,
-	}
-
-	for _, token := range tokens {
-		if isSugar(token) {
-			continue
+	// Offset/Label
+	var offset uint32
+	var label string
+	var instNo uint32
+	if p.current().Type == types.TokenImmediate {
+		offset, err = utils.ParseImmediate(p.current().Literal)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing immediate value: %w", err)
 		}
-		switch token.Type {
-		case types.TokenLBit:
-			instruction.LBit = 1
-		case types.TokenNumber, types.TokenHexNumber:
-			offset, err := parseImmediate(token.Value, 24)
-			if err != nil {
-				return nil, err
-			}
-			instruction.Offset = offset
-		default:
-			return nil, fmt.Errorf("unexpected token in branch instruction: %s", token.Value)
-		}
+		p.consume() // consume immediate token
+	} else if p.current().Type == types.TokenIdentifier {
+		label = p.current().Literal
+		instNo = uint32(len(p.instructions))
+		p.consume() // consume label identifier token
+	} else {
+		return nil, fmt.Errorf("expected immediate value or label identifier after branch mnemonic, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+
+	instruction := &InstructionBranch{
+		Mnemonic:      mnemonic,
+		Condition:     condition,
+		LBit:          lBit,
+		Offset:        offset,
+		Label:         label,
+		InstructionNo: instNo,
 	}
 
 	return instruction, nil
 }
 
-func (b *BranchInstruction) ToMachineCode() []byte {
-	var binary uint32
-	binary |= types.CondCodeBits[b.CondCode] << 28 // Condition code
-	binary |= types.OpCodeBits[b.OpCode] << 25     // Branch opcode
-	binary |= b.LBit << 24                         // Link bit
-	binary |= b.Offset & 0xFFFFFF                  // Offset
+func (i *InstructionBranch) ToMachineCode(labels map[string]uint32) ([]byte, error) {
+	// Calculate offset if label is provided
+	if i.Label != "" {
+		labelAddress, ok := labels[i.Label]
+		if !ok {
+			return nil, fmt.Errorf("label %s not found", i.Label)
+		}
 
-	return bitsToBytes(binary)
-}
-
-func NewBranchExchangeInstruction(opCode types.OpCode, condCode types.CondCode, tokens []types.Token) (*BranchExchangeInstruction, error) {
-	// No tokens needed for branch exchange
-	instruction := &BranchExchangeInstruction{
-		CondCode: condCode,
-		OpCode:   opCode,
+		i.Offset = labelAddress - i.InstructionNo - 2 // -2 for arm pre-fetching and processing
 	}
 
-	for _, token := range tokens {
-		if isSugar(token) {
-			continue
-		}
-		switch token.Type {
-		case types.TokenRegister:
-			reg, err := parseRegister(token.Value)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing branch exchange instruction: %v", err)
-			}
-			instruction.Rn = reg
-		default:
-			return nil, fmt.Errorf("unexpected token in branch exchange instruction: %s", token.Value)
-		}
+	var binary uint32
+	binary |= types.ConditionToBits[i.Condition] << 28 // Set condition bits
+	binary |= types.MnemonicToBits[i.Mnemonic] << 25
+	binary |= i.LBit << 24        // Set L bit
+	binary |= i.Offset & 0xFFFFFF // Set offset bits (24 bits)
+
+	return utils.BitsToBytes(binary), nil
+}
+
+func (p *Parser) parseBranchExchange() (types.Instruction, error) {
+	// Mnemonic
+	mnemonic := types.TokenToMnemonic[p.current().Type]
+	category, ok := types.MnemonicToCategory[mnemonic]
+	if !ok || category != types.MnemonicCategoryBranchExchange {
+		return nil, fmt.Errorf("wrong instruction type! expected branch exchange mnemonic, got %s", p.current().Literal)
+	}
+
+	// Get condition code
+	condition, err := utils.ParseBranchExchangeSuffixes(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing branch exchange suffixes: %w", err)
+	}
+	p.consume() // consume branch exchange mnemonic token
+
+	// Base Register
+	if p.current().Type != types.TokenRegister {
+		return nil, fmt.Errorf("expected register after branch exchange mnemonic, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	baseReg, err := utils.ParseRegister(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing base register: %w", err)
+	}
+	p.consume() // consume base register token
+
+	instruction := &InstructionBranchExchange{
+		Mnemonic:     mnemonic,
+		Condition:    condition,
+		BaseRegister: baseReg,
 	}
 
 	return instruction, nil
 }
 
-func (b *BranchExchangeInstruction) ToMachineCode() []byte {
+func (i *InstructionBranchExchange) ToMachineCode(labels map[string]uint32) ([]byte, error) {
 	var binary uint32
-	binary |= types.CondCodeBits[b.CondCode] << 28 // Condition code
-	binary |= types.OpCodeBits[b.OpCode] << 4      // Branch exchange bits (SO MANY)
-	binary |= b.Rn & 0xF                           // Register number
+	binary |= types.ConditionToBits[i.Condition] << 28 // Set condition bits
+	binary |= types.MnemonicToBits[i.Mnemonic] << 4    // Branch exchange bits (SO MANY)
+	binary |= i.BaseRegister & 0xF
 
-	return bitsToBytes(binary)
+	return utils.BitsToBytes(binary), nil
 }

@@ -4,62 +4,74 @@ import (
 	"fmt"
 
 	"github.com/robertjshirts/rogasmic/types"
+	"github.com/robertjshirts/rogasmic/utils"
 )
 
-type MOVInstruction struct {
-	OpCode    types.OpCode
-	CondCode  types.CondCode
-	Rd        uint32
-	Immediate uint32
+type InstructionMOV struct {
+	Mnemonic     types.MnemonicType
+	Condition    types.ConditionType
+	DestRegister uint32
+	Immediate    uint32
 }
 
-func NewMOVInstruction(opCode types.OpCode, condCode types.CondCode, tokens []types.Token) (*MOVInstruction, error) {
-	// Need at least 2 tokens: Rd and immediate
-	if len(tokens) < 2 {
-		return nil, fmt.Errorf("invalid MOV instruction: expected at least 2 tokens (Rd, immediate), got %d", len(tokens))
+func (p *Parser) parseMOV() (types.Instruction, error) {
+	// Mnemonic
+	mnemonic := types.TokenToMnemonic[p.current().Type]
+	category, ok := types.MnemonicToCategory[mnemonic]
+	if !ok || category != types.MnemonicCategoryMOV {
+		return nil, fmt.Errorf("wrong instruction type! expected MOV instruction, got %s", p.current().Literal)
 	}
 
-	if opCode != types.OpMOVW && opCode != types.OpMOVT {
-		return nil, fmt.Errorf("invalid MOV instruction: opcode %d is not MOVW or MOVT", opCode)
+	// Condition
+	condition, err := utils.ParseMOVSuffixes(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing MOV suffixes: %w", err)
 	}
+	p.consume() // consume MOVT or MOVW token
 
-	instruction := &MOVInstruction{
-		OpCode:   opCode,
-		CondCode: condCode,
+	// Register
+	if p.current().Type != types.TokenRegister {
+		return nil, fmt.Errorf("expected register after MOV mnemonic, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
 	}
+	reg, err := utils.ParseRegister(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing register: %w", err)
+	}
+	p.consume() // consume register token
 
-	for _, token := range tokens {
-		if isSugar(token) {
-			continue
-		}
-		switch token.Type {
-		case types.TokenRegister:
-			rd, err := parseRegister(token.Value)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing MOV instruction: %v", err)
-			}
-			instruction.Rd = rd
-		case types.TokenNumber, types.TokenHexNumber:
-			immediate, err := parseImmediate(token.Value, 16)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing MOV instruction: %v", err)
-			}
-			instruction.Immediate = immediate
-		default:
-			return nil, fmt.Errorf("unexpected token in MOV instruction: %s", token.Value)
-		}
+	// Comma
+	if p.current().Type != types.TokenComma {
+		return nil, fmt.Errorf("expected comma after register, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	p.consume() // consume comma token
+
+	// Immediate
+	if p.current().Type != types.TokenImmediate {
+		return nil, fmt.Errorf("expected immediate value after comma, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	immediate, err := utils.ParseImmediate(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing immediate value: %w", err)
+	}
+	p.consume() // consume immediate token
+
+	instruction := &InstructionMOV{
+		Mnemonic:     mnemonic,
+		Condition:    condition,
+		Immediate:    immediate,
+		DestRegister: reg,
 	}
 
 	return instruction, nil
 }
 
-func (m *MOVInstruction) ToMachineCode() []byte {
+func (i *InstructionMOV) ToMachineCode(labels map[string]uint32) ([]byte, error) {
 	var binary uint32
-	binary |= types.CondCodeBits[m.CondCode] << 28 // Condition code
-	binary |= types.OpCodeBits[m.OpCode] << 20     // 8 whole bits
-	binary |= (m.Immediate >> 12) & 0xF << 16      // top 4 bits of immediate
-	binary |= m.Rd << 12                           // Destination register
-	binary |= m.Immediate & 0x0FFF                 // bottom 12 bits of immediate
+	binary |= types.ConditionToBits[i.Condition] << 28
+	binary |= types.MnemonicToBits[i.Mnemonic] << 20
+	binary |= (i.Immediate >> 12) & 0xF << 16 // Top 4 bits of immediate
+	binary |= i.DestRegister << 12
+	binary |= i.Immediate & 0xFFF // Bottom 12 bits of immediate
 
-	return bitsToBytes(binary)
+	return utils.BitsToBytes(binary), nil
 }

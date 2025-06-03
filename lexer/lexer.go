@@ -1,179 +1,140 @@
 package lexer
 
 import (
+	"fmt"
 	"unicode"
 
 	"github.com/robertjshirts/rogasmic/types"
+	"github.com/robertjshirts/rogasmic/utils"
 )
 
-type Lexer struct {
-	input   string
-	pos     int
-	readPos int
-	ch      byte
-	line    int
+type lexer struct {
+	input  string
+	pos    int
+	line   int
+	col    int
+	tokens []types.Token
 }
 
-func NewLexer(input string, line int) *Lexer {
-	l := &Lexer{
-		input:   input,
-		line:    line,
-		readPos: 0,
+func NewLexer(input string) *lexer {
+	return &lexer{
+		input:  input,
+		pos:    0,
+		line:   1,
+		col:    1,
+		tokens: []types.Token{},
 	}
-	l.consumeChar()
-	return l
 }
 
-func (l *Lexer) consumeChar() {
-	if l.readPos >= len(l.input) {
-		l.ch = 0
+// current returns the current character. returns 0 at EOF.
+func (l *lexer) current() byte {
+	if l.pos >= len(l.input) {
+		return 0 // EOF
+	}
+	return l.input[l.pos]
+}
+
+// consume advances to the next char. updates pos, col, and line.
+func (l *lexer) consume() {
+	if l.current() == '\n' {
+		l.line++
+		l.col = 1
 	} else {
-		l.ch = l.input[l.readPos]
+		l.col++
 	}
-	l.pos = l.readPos
-	l.readPos++
+	l.pos++
 }
 
-func (l *Lexer) peekChar() byte {
-	if l.readPos >= len(l.input) {
-		return 0
+// peek returns the next character without consuming it. returns 0 at EOF.
+func (l *lexer) peek() byte {
+	if l.pos+1 >= len(l.input) {
+		return 0 // EOF
 	}
-	return l.input[l.readPos]
+	return l.input[l.pos+1]
 }
 
-func (l *Lexer) readIdentifier() string {
+// skipWhitespace consumes spaces, tabs, and newlines
+func (l *lexer) skipWhitespace() {
+	for unicode.IsSpace(rune(l.current())) {
+		l.consume()
+	}
+}
+
+// consumeLit consumes a literal until it hits a non-literal character, and returns the literal
+func (l *lexer) consumeLit() string {
 	start := l.pos
-	for isLetter(l.ch) || isDigit(l.ch) {
-		l.consumeChar()
+	for utils.IsLiteralChar(l.current()) {
+		l.consume()
 	}
 	return l.input[start:l.pos]
 }
 
-func (l *Lexer) readNumber() (string, types.TokenType) {
-	start := l.pos
-	// hex?
-	if l.ch == '0' && (l.peekChar() == 'x' || l.peekChar() == 'X') {
-		l.consumeChar() // 0
-		l.consumeChar() // x
-		for isHexDigit(l.ch) {
-			l.consumeChar()
-		}
-		return l.input[start:l.pos], types.TokenHexNumber
+func (l *lexer) consumeComment() {
+	// Consume until the end of the line or EOF
+	for l.current() != '\n' && l.current() != 0 {
+		l.consume()
 	}
-
-	// decimal
-	for isDigit(l.ch) {
-		l.consumeChar()
+	if l.current() == '\n' {
+		l.consume() // Consume the newline character
 	}
-
-	return l.input[start:l.pos], types.TokenNumber
-	// No binary. fuck binary. me and my homies hate binary
 }
 
-func (l *Lexer) readComment() string {
-	start := l.pos
-	// Consume up to the EOL
-	for l.peekChar() != 0 {
-		l.consumeChar()
-	}
-	l.consumeChar()
-	return l.input[start:l.pos]
+// appendToken appends a new token to the lexer tokens slice. sets the column to the start of the literal.
+func (l *lexer) appendToken(tokenType types.TokenType, literal string, startRow, startCol int) {
+	l.tokens = append(l.tokens, types.Token{
+		Type:    tokenType,
+		Literal: literal,
+		Line:    startRow,
+		Col:     startCol,
+	})
 }
 
-func (l *Lexer) nextToken() types.Token {
-	var tok types.Token
-
-	for unicode.IsSpace(rune(l.ch)) || l.ch == ',' || l.ch == '(' || l.ch == ')' {
-		l.consumeChar()
-	}
-
-	tok.Line = l.line
-	tok.Col = l.pos
-
-	switch l.ch {
-	case 0:
-		tok.Type = types.TokenEOF
-		tok.Value = ""
-	case ';':
-		tok.Type = types.TokenSemicolon
-		tok.Value = l.readComment()
-		return tok
-	case 'S':
-		if unicode.IsSpace(rune(l.peekChar())) {
-			tok.Type = types.TokenSBit
-			tok.Value = "S"
-			l.consumeChar()
-			return tok
-		}
-		fallthrough // Fall through ie STR instruction
-	case 'L':
-		if unicode.IsSpace(rune(l.peekChar())) {
-			tok.Type = types.TokenLBit
-			tok.Value = "L"
-			l.consumeChar()
-			return tok
-		}
-		fallthrough // Fall through ie LDR instruction
-	default:
-		if unicode.IsLetter(rune(l.ch)) {
-			lit := l.readIdentifier()
-			tok.Value = lit
-			tok.Type = types.TokenIdentifier
-			if isRegisterLiteral(lit) {
-				tok.Type = types.TokenRegister
+// Tokenize processes some input string and returns a slice of tokens.
+func (l *lexer) Tokenize() ([]types.Token, error) {
+	for l.current() != 0 {
+		l.skipWhitespace()
+		startRow := l.line // Store the starting row for the token
+		startCol := l.col  // Store the starting column for the token
+		switch l.current() {
+		case ';':
+			// Skip comments
+			l.consumeComment()
+		case ',':
+			l.appendToken(types.TokenComma, string(l.current()), startRow, startCol)
+			l.consume()
+		case '[':
+			l.appendToken(types.TokenLBracket, string(l.current()), startRow, startCol)
+			l.consume()
+		case ']':
+			l.appendToken(types.TokenRBracket, string(l.current()), startRow, startCol)
+			l.consume()
+		case '#':
+			l.consume() // Skip the #
+			lit := l.consumeLit()
+			if !utils.IsImmediate(lit) {
+				return nil, fmt.Errorf("invalid immediate value: %s at line %d, col %d", lit, l.line, l.col)
 			}
-			return tok
-		}
-
-		if unicode.IsDigit(rune(l.ch)) {
-			start := l.pos
-			lit, typ := l.readNumber()
-			return types.Token{Type: typ, Value: lit, Line: l.line, Col: start}
-		}
-
-		tok = types.Token{Type: types.TokenError, Value: string(l.ch), Line: l.line, Col: l.pos}
-	}
-
-	l.consumeChar()
-	return tok
-}
-
-func LexLine(line string, lineNo int) []types.Token {
-	l := NewLexer(line, lineNo)
-	var tokens []types.Token
-	for tok := l.nextToken(); tok.Type != types.TokenEOF; tok = l.nextToken() {
-		if tok.Type == types.TokenError {
-			panic("Lexer - Unexpected token: " + tok.Value)
-		}
-		tokens = append(tokens, tok)
-	}
-	return tokens
-}
-
-func isRegisterLiteral(lit string) bool {
-	if len(lit) < 2 {
-		return false
-	}
-
-	if lit[0] != 'R' && lit[0] != 'r' {
-		return false
-	}
-	for i := 1; i < len(lit); i++ {
-		if !unicode.IsDigit(rune(lit[i])) {
-			return false
+			l.appendToken(types.TokenImmediate, lit, startRow, startCol)
+		default: // Handle registers, mnemonics, and labels/identifiers
+			lit := l.consumeLit()
+			if lit == "" {
+				return nil, fmt.Errorf("unexpected input (not a valid lit or identifier) at line %d, col %d", l.line, l.col)
+			}
+			if utils.IsRegister(lit) {
+				lit := utils.NormalizeRegister(lit) // For lr, sp, and pc, switch the actual register nums
+				l.appendToken(types.TokenRegister, lit, startRow, startCol)
+			} else if utils.IsOperation(lit) {
+				l.appendToken(utils.GetMnemonicTokenType(lit), lit, startRow, startCol)
+			} else { // After checking the literal against all reserved keywords, it is assumed to be an identifier
+				if l.current() == ':' { // Check for label
+					l.consume() // Consume the ':'
+					l.appendToken(types.TokenLabel, lit, startRow, startCol)
+				} else { // Otherwise, it's just an identifier
+					l.appendToken(types.TokenIdentifier, lit, startRow, startCol)
+				}
+			}
 		}
 	}
-	return true
-}
-
-func isDigit(ch byte) bool {
-	return ch >= '0' && ch <= '9'
-}
-
-func isLetter(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
-}
-
-func isHexDigit(ch byte) bool {
-	return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
+	l.appendToken(types.TokenEOF, "", -1, -1) // Append EOF token at the end
+	return l.tokens, nil
 }

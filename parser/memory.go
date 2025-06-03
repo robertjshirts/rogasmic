@@ -4,89 +4,98 @@ import (
 	"fmt"
 
 	"github.com/robertjshirts/rogasmic/types"
+	"github.com/robertjshirts/rogasmic/utils"
 )
 
-type MemoryInstruction struct {
-	OpCode   types.OpCode
-	CondCode types.CondCode
-	Rd       uint32
-	Rn       uint32
-	IBit     uint32
-	PBit     uint32
-	UBit     uint32
-	BBit     uint32
-	WBit     uint32
+type InstructionMemory struct {
+	Mnemonic     types.MnemonicType
+	Condition    types.ConditionType
+	DestRegister uint32
+	BaseRegister uint32
+	IBit         uint32
+	PBit         uint32
+	UBit         uint32
+	BBit         uint32
+	WBit         uint32
 }
 
-func NewMemoryInstruction(opCode types.OpCode, condCode types.CondCode, tokens []types.Token) (*MemoryInstruction, error) {
-	// Need at least 2 tokens, Rd and Rn
-	if len(tokens) < 2 {
-		return nil, fmt.Errorf("invalid memory instruction: expected at least 2 tokens (Rd, Rn), got %d", len(tokens))
+func (p *Parser) parseMemory() (types.Instruction, error) {
+	// Mnemonic
+	mnemonic := types.TokenToMnemonic[p.current().Type]
+	category, ok := types.MnemonicToCategory[mnemonic]
+	if !ok || category != types.MnemonicCategoryLoadStore {
+		return nil, fmt.Errorf("wrong instruction type! expected LDR or STR, got %s", p.current().Literal)
 	}
 
-	if instType := types.InstructionTypes[opCode]; instType != types.MemoryType {
-		return nil, fmt.Errorf("invalid memory instruction: opcode %d is not a memory type", opCode)
+	// Get condition code and suffixes
+	condition, iBit, pBit, uBit, bBit, wBit, err := utils.ParseMemorySuffixes(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing memory suffixes: %w", err)
 	}
+	p.consume() // consume LDR or STR token
 
-	instruction := &MemoryInstruction{
-		OpCode:   opCode,
-		CondCode: condCode,
+	// Destination Register
+	if p.current().Type != types.TokenRegister {
+		return nil, fmt.Errorf("expected register after LDR/STR mnemonic, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
 	}
-
-	setRd := false
-	setRn := false
-
-	for _, token := range tokens {
-		if isSugar(token) {
-			continue
-		}
-		switch token.Type {
-		case types.TokenRegister:
-			reg, err := parseRegister(token.Value)
-			if err != nil {
-				return nil, err
-			}
-			if !setRd {
-				instruction.Rd = reg
-				setRd = true
-			} else {
-				instruction.Rn = reg
-				setRn = true
-			}
-		default:
-			return nil, fmt.Errorf("unexpected token in memory instruction: %s", token.Value)
-		}
+	destReg, err := utils.ParseRegister(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing destination register: %w", err)
 	}
+	p.consume() // consume destination register token
 
-	if !setRd {
-		return nil, fmt.Errorf("missing destination register (Rd) in memory instruction")
+	// Comma
+	if p.current().Type != types.TokenComma {
+		return nil, fmt.Errorf("expected comma after destination register, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
 	}
-	if !setRn {
-		return nil, fmt.Errorf("missing source register (Rn) in memory instruction")
-	}
+	p.consume() // consume comma token
 
-	instruction.IBit = 0
-	instruction.PBit = 0
-	instruction.UBit = 0
-	instruction.BBit = 0
-	instruction.WBit = 0
+	// Base Register
+	if p.current().Type != types.TokenLBracket {
+		return nil, fmt.Errorf("expected '[' for base register, got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	p.consume() // consume LBracket token
+	if p.current().Type != types.TokenRegister {
+		return nil, fmt.Errorf("expected base register after '[', got %s at line %d, col %d", p.current().Literal, p.current().Line, p.current().Col)
+	}
+	baseReg, err := utils.ParseRegister(p.current().Literal)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing base register: %w", err)
+	}
+	p.consume() // consume base register token
+	if p.current().Type != types.TokenRBracket {
+		return nil, fmt.Errorf("expected ']' after base register, got %s at line %d, col %d", p.peek().Literal, p.peek().Line, p.peek().Col)
+	}
+	p.consume() // consume RBracket token
+
+	instruction := &InstructionMemory{
+		Mnemonic:     mnemonic,
+		Condition:    condition,
+		DestRegister: destReg,
+		BaseRegister: baseReg,
+		IBit:         iBit,
+		PBit:         pBit,
+		UBit:         uBit,
+		BBit:         bBit,
+		WBit:         wBit,
+	}
 
 	return instruction, nil
 }
 
-func (m *MemoryInstruction) ToMachineCode() []byte {
+func (i *InstructionMemory) ToMachineCode(labels map[string]uint32) ([]byte, error) {
 	var binary uint32
-	binary |= types.CondCodeBits[m.CondCode] << 28 // Condition code
-	binary |= 1 << 26                              // Data loading instruction
-	binary |= m.IBit << 25                         // I bit, is offset immediate or from a register
-	binary |= m.PBit << 24                         // P bit, pre or post index
-	binary |= m.UBit << 23                         // U bit, add or subtract offset
-	binary |= m.BBit << 22                         // B bit, byte or word
-	binary |= m.WBit << 21                         // W bit, write back
-	binary |= types.OpCodeBits[m.OpCode] << 20     // Opcode bit (1 bit)
-	binary |= m.Rn << 16                           // Source register
-	binary |= m.Rd << 12                           // Destination register
-	binary |= 0 << 11                              // Offset
+	binary |= types.ConditionToBits[i.Condition] << 28 // Condition code
+	binary |= 1 << 26                                  // Data loading instruction
+	binary |= i.IBit << 25                             // I bit, is offset immediate or from a register
+	binary |= i.PBit << 24                             // P bit, pre or post index
+	binary |= i.UBit << 23                             // U bit, add or subtract offset
+	binary |= i.BBit << 22                             // B bit, byte or word
+	binary |= i.WBit << 21                             // W bit, write back
+	binary |= types.MnemonicToBits[i.Mnemonic] << 20   // Opcode bit (1 bit)
+	binary |= i.BaseRegister << 16                     // Base register
+	binary |= i.DestRegister << 12                     // Destination register
+	binary |= 0 << 11                                  // Offset
 
-	return bitsToBytes(binary)
+	return utils.BitsToBytes(binary), nil
 }

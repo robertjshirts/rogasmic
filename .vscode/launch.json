@@ -12,7 +12,7 @@
       "mode": "auto",
       // use main.go
       "program": "${workspaceFolder}/main.go",
-      "args": ["asm.txt", "kernel7.img"]
+      "args": ["labels.asm"]
     }
   ]
 }
