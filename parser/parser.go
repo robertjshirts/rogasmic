@@ -74,6 +74,12 @@ func (p *Parser) Parse() ([]types.Instruction, types.LabelMap, error) {
 				return nil, nil, fmt.Errorf("error parsing memory instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
 			}
 			p.instructions = append(p.instructions, instruction)
+		case types.MnemonicCategoryLoadStoreMultiple:
+			instruction, err := p.parseMemoryMultiple()
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing block memory instruction at line %d, col %d: %w", p.current().Line, p.current().Col, err)
+			}
+			p.instructions = append(p.instructions, instruction)
 		case types.MnemonicCategoryArithmetic:
 			instruction, err := p.parseArithmetic()
 			if err != nil {

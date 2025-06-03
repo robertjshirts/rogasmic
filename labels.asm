@@ -4,6 +4,7 @@ ADD R2, R4, #0x8
 LDR R3, [R2]
 ORR R3, R3, #0x8
 STR R3, [R2]
+
 start:
 ADD R3, R4, #0x1C 
 MOVW R2, #0x0000 
@@ -25,4 +26,4 @@ loop:
 SUBS R5, R5, #0x01
 BPL loop
 
-BX R14
+BX lr

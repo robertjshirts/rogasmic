@@ -7,6 +7,8 @@ const (
 	MnemonicMOVT
 	MnemonicLDR
 	MnemonicSTR
+	MnemonicLDM
+	MnemonicSTM
 	MnemonicADD
 	MnemonicSUB
 	MnemonicAND
@@ -21,6 +23,7 @@ type MnemonicCategory uint32
 const (
 	MnemonicCategoryMOV MnemonicCategory = iota
 	MnemonicCategoryLoadStore
+	MnemonicCategoryLoadStoreMultiple
 	MnemonicCategoryArithmetic
 	MnemonicCategoryBranch
 	MnemonicCategoryBranchExchange

@@ -49,22 +49,31 @@ func ParseMOVSuffixes(mnemonicLiteral string) (types.ConditionType, error) {
 }
 
 // For now we return false on all suffixes
-func ParseMemorySuffixes(mnemonicLiteral string) (types.ConditionType, uint32, uint32, uint32, uint32, uint32, error) {
-	if len(mnemonicLiteral) < 3 || len(mnemonicLiteral) > 6 {
-		return types.ConditionAL, 0, 0, 0, 0, 0, fmt.Errorf("invalid memory mnemonic length: %s", mnemonicLiteral)
+// Returns condition, pBit, uBit, error
+func ParseMemorySuffixes(mnemonicLiteral string) (types.ConditionType, uint32, uint32, error) {
+	if len(mnemonicLiteral) < 3 || len(mnemonicLiteral) > 8 {
+		return types.ConditionAL, 0, 0, fmt.Errorf("invalid memory mnemonic length: %s", mnemonicLiteral)
 	}
 
-	mnemonicLiteral = strings.ToLower(mnemonicLiteral[3:]) // Remove LDR/STR
-	if mnemonicLiteral == "" {
-		return types.ConditionAL, 0, 0, 0, 0, 0, nil
+	var pBit, uBit uint32
+	if mnemonicLiteral[0] == 's' || mnemonicLiteral[0] == 'S' {
+		uBit = 1 // add offset for store, subtract for load
+	} else {
+		pBit = 1 // preIndexed for LDR
 	}
+
+	mnemonicLiteral = strings.ToLower(mnemonicLiteral[3:]) // Remove LDR/STR/LDM/STM
+	if mnemonicLiteral == "" {
+		return types.ConditionAL, pBit, uBit, nil
+	}
+
 	// Parse condition
 	condition, ok := types.LiteralToCondition[mnemonicLiteral]
 	if !ok {
-		return types.ConditionAL, 0, 0, 0, 0, 0, fmt.Errorf("invalid memory condition: %s", mnemonicLiteral)
+		return types.ConditionAL, pBit, uBit, fmt.Errorf("invalid memory condition: %s", mnemonicLiteral)
 	}
 
-	return condition, 0, 0, 0, 0, 0, nil
+	return condition, pBit, uBit, nil
 }
 
 func ParseArithmeticSuffixes(mnemonicLiteral string) (types.ConditionType, uint32, error) {

@@ -16,6 +16,7 @@ const (
 	TokenComma
 	TokenLBracket
 	TokenRBracket
+	TokenBang // For write back bit on registers (specifically for LDM/STM)
 
 	TokenIdentifier
 	TokenLabel
@@ -27,6 +28,8 @@ const (
 	TokenMOVT
 	TokenLDR
 	TokenSTR
+	TokenLDM
+	TokenSTM
 	TokenADD
 	TokenSUB
 	TokenAND
@@ -56,6 +59,8 @@ var TokenToLiteral = map[TokenType]string{
 	TokenMOVT:       "MOVT",
 	TokenLDR:        "LDR",
 	TokenSTR:        "STR",
+	TokenLDM:        "LDM",
+	TokenSTM:        "STM",
 	TokenADD:        "ADD",
 	TokenSUB:        "SUB",
 	TokenAND:        "AND",

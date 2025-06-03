@@ -108,6 +108,9 @@ func (l *lexer) Tokenize() ([]types.Token, error) {
 		case ']':
 			l.appendToken(types.TokenRBracket, string(l.current()), startRow, startCol)
 			l.consume()
+		case '!':
+			l.appendToken(types.TokenBang, string(l.current()), startRow, startCol)
+			l.consume()
 		case '#':
 			l.consume() // Skip the #
 			lit := l.consumeLit()
