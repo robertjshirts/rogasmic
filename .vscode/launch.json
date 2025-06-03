@@ -12,7 +12,7 @@
       "mode": "auto",
       // use main.go
       "program": "${workspaceFolder}/main.go",
-      "args": ["labels.asm"]
+      "args": ["compiled-expression.asm"]
     }
   ]
 }

@@ -111,39 +111,42 @@ func (l *lexer) Tokenize() ([]types.Token, error) {
 		case '!':
 			l.appendToken(types.TokenBang, string(l.current()), startRow, startCol)
 			l.consume()
-	case '#':
-		l.consume() // Skip the #
-		lit := l.consumeLit()
-		if !utils.IsImmediate(lit) {
-			return nil, fmt.Errorf("invalid immediate value: %s at line %d, col %d", lit, l.line, l.col)
-		}
-		l.appendToken(types.TokenImmediate, lit, startRow, startCol)
-	case '{':
-		l.appendToken(types.TokenLBrace, string(l.current()), startRow, startCol)
-		l.consume()
-	case '}':
-		l.appendToken(types.TokenRBrace, string(l.current()), startRow, startCol)
-		l.consume()
-	case '-':
-		l.appendToken(types.TokenDash, string(l.current()), startRow, startCol)
-		l.consume()
-	default: // Handle registers, mnemonics, and labels/identifiers
+		case '>': // Identifier
+			l.consume() // consume the '>'
+			lit := l.consumeLit()
+			l.appendToken(types.TokenIdentifier, lit, startRow, startCol)
+		case '#':
+			l.consume() // Skip the #
+			lit := l.consumeLit()
+			if !utils.IsImmediate(lit) {
+				return nil, fmt.Errorf("invalid immediate value: %s at line %d, col %d", lit, l.line, l.col)
+			}
+			l.appendToken(types.TokenImmediate, lit, startRow, startCol)
+		case '{':
+			l.appendToken(types.TokenLBrace, string(l.current()), startRow, startCol)
+			l.consume()
+		case '}':
+			l.appendToken(types.TokenRBrace, string(l.current()), startRow, startCol)
+			l.consume()
+		case '-':
+			l.appendToken(types.TokenDash, string(l.current()), startRow, startCol)
+			l.consume()
+		default: // Handle registers, mnemonics, and labels/identifiers
 			lit := l.consumeLit()
 			if lit == "" {
 				return nil, fmt.Errorf("unexpected input (not a valid lit or identifier) at line %d, col %d", l.line, l.col)
 			}
-			if utils.IsRegister(lit) {
+
+			if l.current() == ':' {
+				l.consume() // Consume the ':' if it exists
+				l.appendToken(types.TokenLabel, lit, startRow, startCol)
+			} else if utils.IsRegister(lit) {
 				lit := utils.NormalizeRegister(lit) // For lr, sp, and pc, switch the actual register nums
 				l.appendToken(types.TokenRegister, lit, startRow, startCol)
 			} else if utils.IsOperation(lit) {
 				l.appendToken(utils.GetMnemonicTokenType(lit), lit, startRow, startCol)
-			} else { // After checking the literal against all reserved keywords, it is assumed to be an identifier
-				if l.current() == ':' { // Check for label
-					l.consume() // Consume the ':'
-					l.appendToken(types.TokenLabel, lit, startRow, startCol)
-				} else { // Otherwise, it's just an identifier
-					l.appendToken(types.TokenIdentifier, lit, startRow, startCol)
-				}
+			} else {
+				return nil, fmt.Errorf("unexpected identifier %s at line %d, col %d", lit, l.line, l.col)
 			}
 		}
 	}
