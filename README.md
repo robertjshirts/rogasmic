@@ -1,4 +1,4 @@
-# Assembly... Parser? Assembler? Compiler? IDK Man 
+# Assembly... Parser? Compiler? Assembler? IDK Man 
 
 ROGASMIC
 Robbie's Original Golang ASM Interpreter/Compiler

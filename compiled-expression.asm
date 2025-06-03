@@ -36,7 +36,7 @@ ldmea sp!, {r0-r12} ; restore all registers
 
 ; repeat
 subs r7, r7, #1     ; decrement counter
-bpl >blink_loop      ; blink again if counter is positive
+bgt >blink_loop      ; blink again if counter is positive (but not zero)
 
 ; long delay
 stmea sp!, {r0-r12} ; store everything

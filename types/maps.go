@@ -36,6 +36,7 @@ var LiteralToCondition = map[string]ConditionType{
 	"eq": ConditionEQ,
 	"pl": ConditionPL,
 	"al": ConditionAL,
+	"gt": ConditionGT,
 	// Only supporting a few conditions for now
 }
 
@@ -43,6 +44,7 @@ var ConditionToBits = map[ConditionType]uint32{
 	ConditionEQ: 0b0000,
 	ConditionAL: 0b1110,
 	ConditionPL: 0b0101,
+	ConditionGT: 0b1100,
 	// "eq": 0b0000,
 	// "ne": 0b0001,
 	// "cs": 0b0010,
